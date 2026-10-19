@@ -10,6 +10,23 @@ const SECRETS_DIR = path.resolve(__dirname, '../../../data/.secrets');
 
 const cache = new Map();
 
+/** Well-known example values that shipped in docs/.env.example. Never acceptable as real secrets. */
+export const KNOWN_PLACEHOLDER_SECRETS = Object.freeze([
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  'super_secret_jwt_key_change_in_production_min_32_chars',
+  'android_pairing_enrollment_secret_key_32_chars',
+  'AdminSecurePassword123!',
+  'merchant_webhook_secret_for_wallet_store',
+  'change-me',
+  'changeme'
+]);
+
+/** True when a configured secret is a documented placeholder or too short to be a real secret. */
+export function isWeakSecret(value) {
+  const v = String(value || '').trim();
+  return !v || KNOWN_PLACEHOLDER_SECRETS.includes(v) || /^(.)\1+$/.test(v);
+}
+
 /**
  * Resolves a service secret: explicit env var first, else a random value
  * generated once and persisted under data/.secrets/ (shared by all local services).
@@ -19,7 +36,21 @@ const cache = new Map();
  */
 export function resolveSecret(name, envVar) {
   const fromEnv = envVar ? (process.env[envVar] || '').trim() : '';
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (isWeakSecret(fromEnv)) {
+      // A copied placeholder is a publicly known secret. Production must not run with it;
+      // elsewhere warn once and fall through to a generated secret.
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`${envVar} is set to a well-known placeholder value. Unset it (a strong secret is auto-generated) or set a unique random value.`);
+      }
+      if (!cache.has(`warned:${envVar}`)) {
+        cache.set(`warned:${envVar}`, true);
+        console.warn(`[secrets] ${envVar} is a placeholder value and was ignored; using a generated secret instead.`);
+      }
+    } else {
+      return fromEnv;
+    }
+  }
   if (cache.has(name)) return cache.get(name);
 
   const file = path.join(SECRETS_DIR, name);

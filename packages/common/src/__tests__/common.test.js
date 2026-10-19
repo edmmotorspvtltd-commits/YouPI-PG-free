@@ -272,3 +272,35 @@ describe('safeEqual', () => {
     assert.equal(safeEqual(undefined, 'abc'), false);
   });
 });
+
+describe('placeholder secret rejection', () => {
+  test('flags documented placeholders and repeated-character secrets as weak', async () => {
+    const { isWeakSecret, KNOWN_PLACEHOLDER_SECRETS } = await import('../secrets.js');
+    for (const p of KNOWN_PLACEHOLDER_SECRETS) assert.equal(isWeakSecret(p), true, p);
+    assert.equal(isWeakSecret('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), true);
+    assert.equal(isWeakSecret(''), true);
+    assert.equal(isWeakSecret('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'), false);
+  });
+
+  test('resolveSecret ignores a placeholder env value outside production and throws in production', async () => {
+    const { resolveSecret, KNOWN_PLACEHOLDER_SECRETS } = await import('../secrets.js');
+    const placeholder = KNOWN_PLACEHOLDER_SECRETS[0];
+    const prevEnv = process.env.NODE_ENV;
+    process.env.YOUPI_TEST_SECRET_ENV = placeholder;
+    try {
+      process.env.NODE_ENV = 'test';
+      const generated = resolveSecret('test_placeholder_secret', 'YOUPI_TEST_SECRET_ENV');
+      assert.notEqual(generated, placeholder);
+      assert.match(generated, /^[0-9a-f]{64}$/);
+      process.env.NODE_ENV = 'production';
+      assert.throws(() => resolveSecret('test_placeholder_secret', 'YOUPI_TEST_SECRET_ENV'), /well-known placeholder/);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      delete process.env.YOUPI_TEST_SECRET_ENV;
+      const { rmSync } = await import('node:fs');
+      const { resolve, dirname } = await import('node:path');
+      const { fileURLToPath } = await import('node:url');
+      rmSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../../data/.secrets/test_placeholder_secret'), { force: true });
+    }
+  });
+});

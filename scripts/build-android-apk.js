@@ -128,9 +128,8 @@ try {
   console.log('🚚 [6/6] Distributing final APK to app portals...');
   const apkBuffer = fs.readFileSync(signedApk);
   const targets = [
-    path.resolve(REPO_ROOT, 'apps/android-observer-app/youpi-sms-gateway.apk'),
-    path.resolve(REPO_ROOT, 'apps/payment-api/public/youpi-sms-gateway.apk'),
-    path.resolve(REPO_ROOT, 'apps/merchant-admin/public/youpi-sms-gateway.apk')
+    // Single canonical location; merchant-admin's download route falls back to it.
+    path.resolve(REPO_ROOT, 'apps/android-observer-app/youpi-sms-gateway.apk')
   ];
 
   for (const t of targets) {
